@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import base64
+import html
 import json
 import os
+import re
 from datetime import datetime, timezone
+from mimetypes import guess_type
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -29,10 +33,447 @@ NOT_HELPFUL_REASONS = [
     "hallucination",
     "other",
 ]
+DEMO_ASSISTANT_ANSWER = "Derzeit ist keiner bei VW da.."
+VW_LOGO_PATH = Path("image/Volkswagen_logo_2019.svg.png")
 
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _load_logo_data_uri(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None
+
+    mime_type, _ = guess_type(path.name)
+    if not mime_type:
+        mime_type = "image/png"
+    encoded = base64.b64encode(raw).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
+
+
+def _inject_vw_theme() -> None:
+    st.markdown(
+        """
+        <style>
+        :root {
+            --vw-navy: #001b4f;
+            --vw-blue: #0046ad;
+            --vw-electric: #0a72ff;
+            --vw-ice: #eef4fb;
+            --vw-line: #d5dfed;
+            --vw-text: #000000;
+            --vw-white: #ffffff;
+        }
+
+        [data-testid="stAppViewContainer"] {
+            background:
+                radial-gradient(circle at 8% 8%, #ffffff 0%, #f3f8ff 35%, #e8f0fb 100%);
+        }
+
+        [data-testid="stHeader"] {
+            background: transparent;
+            height: 0rem;
+        }
+
+        [data-testid="stHeader"] > div {
+            height: 0rem;
+            min-height: 0rem;
+        }
+
+        [data-testid="stDecoration"] {
+            display: none;
+        }
+
+        .block-container {
+            max-width: 1450px;
+            padding-top: 0.35rem;
+            padding-bottom: 1.2rem;
+        }
+
+        .vw-hero {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            background: linear-gradient(180deg, #ffffff 0%, #f3f8ff 100%);
+            border-radius: 16px;
+            padding: 0.85rem 1rem;
+            color: var(--vw-text);
+            border: 1px solid #bfd2ec;
+            box-shadow: 0 8px 20px rgba(13, 31, 59, 0.08);
+            margin-bottom: 0.8rem;
+            margin-top: 0.45rem;
+        }
+
+        .vw-hero-left {
+            display: flex;
+            align-items: center;
+            gap: 0.9rem;
+        }
+
+        .vw-logo-wrap {
+            width: 66px;
+            height: 66px;
+            border-radius: 999px;
+            background: #ffffff;
+            border: 1px solid #bfd2ec;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 0 0 1px #ffffff;
+            flex: 0 0 auto;
+        }
+
+        .vw-logo-img {
+            width: 56px;
+            height: 56px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .vw-hero-copy {
+            margin-top: 0.35rem;
+        }
+
+        .vw-hero-title {
+            font-weight: 700;
+            font-size: 1.2rem;
+            letter-spacing: 0.01rem;
+            color: #000000;
+        }
+
+        .vw-hero-sub {
+            opacity: 0.92;
+            font-size: 0.85rem;
+            color: #000000;
+        }
+
+        .vw-chip {
+            background: #e9f2ff;
+            border: 1px solid #bfd2ec;
+            border-radius: 999px;
+            padding: 0.35rem 0.7rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            white-space: nowrap;
+            color: #000000;
+        }
+
+        .vw-card {
+            background: var(--vw-white);
+            border: 1px solid var(--vw-line);
+            border-radius: 12px;
+            padding: 0.85rem 0.9rem;
+            box-shadow: 0 3px 10px rgba(13, 31, 59, 0.05);
+            margin-bottom: 0.4rem;
+        }
+
+        .vw-card-title {
+            color: #000000;
+            font-weight: 700;
+            margin-bottom: 0.15rem;
+        }
+
+        .vw-card-meta {
+            color: #000000;
+            font-size: 0.85rem;
+            margin-bottom: 0.35rem;
+        }
+
+        .vw-card-snippet {
+            color: var(--vw-text);
+            font-size: 0.9rem;
+            line-height: 1.35;
+            margin-bottom: 0.35rem;
+        }
+
+        .vw-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+        }
+
+        .vw-badge {
+            background: #e9f2ff;
+            color: #000000;
+            border: 1px solid #c4d8f7;
+            border-radius: 999px;
+            padding: 0.18rem 0.5rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.01rem;
+        }
+
+        .chat-shell {
+            background:
+                linear-gradient(180deg, #f7fbff 0%, #edf4ff 100%);
+            border: 1px solid #c7d9ef;
+            border-radius: 14px;
+            padding: 0.75rem 0.7rem;
+            max-height: 430px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+        }
+
+        .chat-shell::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chat-shell::-webkit-scrollbar-thumb {
+            background: #c2d6ef;
+            border-radius: 999px;
+        }
+
+        .chat-row {
+            display: flex;
+            width: 100%;
+        }
+
+        .chat-row-user {
+            justify-content: flex-end;
+        }
+
+        .chat-row-assistant {
+            justify-content: flex-start;
+        }
+
+        .chat-bubble {
+            max-width: 82%;
+            border-radius: 12px;
+            border: 1px solid #c7d9ef;
+            box-shadow: 0 2px 8px rgba(13, 31, 59, 0.06);
+            padding: 0.46rem 0.62rem;
+        }
+
+        .chat-bubble-user {
+            background: #e8f1ff;
+            border-bottom-right-radius: 5px;
+        }
+
+        .chat-bubble-assistant {
+            background: #ffffff;
+            border-bottom-left-radius: 5px;
+        }
+
+        .chat-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.72rem;
+            color: #334155;
+            margin-bottom: 0.18rem;
+            gap: 0.5rem;
+        }
+
+        .chat-text {
+            color: #000000;
+            line-height: 1.4;
+            font-size: 0.92rem;
+            word-break: break-word;
+        }
+
+        .chat-empty {
+            color: #334155;
+            text-align: center;
+            padding: 0.9rem 0.4rem;
+            font-size: 0.9rem;
+        }
+
+        div[data-testid="stForm"] {
+            background: #ffffff;
+            border: 1px solid #c7d9ef;
+            border-radius: 14px;
+            padding: 0.5rem 0.55rem;
+            margin-top: 0.55rem;
+        }
+
+        div[data-testid="stForm"] [data-testid="stTextInput"] input {
+            border: none !important;
+            border-radius: 999px;
+            background: #fbfdff;
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            padding-left: 0.85rem;
+            height: 2.5rem;
+            outline: none !important;
+            box-shadow: none !important;
+        }
+
+        div[data-testid="stForm"] [data-baseweb="input"] {
+            box-shadow: none !important;
+            outline: none !important;
+            border: none !important;
+        }
+
+        div[data-testid="stForm"] [data-baseweb="input"] > div {
+            border: 1px solid #c7d9ef !important;
+            box-shadow: none !important;
+            outline: none !important;
+            background: #fbfdff !important;
+            border-radius: 999px !important;
+        }
+
+        div[data-testid="stForm"] [data-baseweb="input"] > div:focus-within {
+            border-color: #7ea7e4 !important;
+            box-shadow: 0 0 0 1px rgba(126, 167, 228, 0.25) !important;
+            outline: none !important;
+        }
+
+        div[data-testid="stForm"] [data-testid="stTextInput"] input:focus,
+        div[data-testid="stForm"] [data-testid="stTextInput"] input:focus-visible {
+            outline: none !important;
+            box-shadow: none !important;
+            border: none !important;
+        }
+
+        div[data-testid="stForm"] [data-testid="stTextInput"] input::placeholder {
+            color: #64748b !important;
+            opacity: 1;
+        }
+
+        .stFormSubmitButton > button {
+            height: 2.5rem;
+            border-radius: 999px;
+            font-weight: 700;
+            color: #ffffff !important;
+            background: linear-gradient(180deg, #001b4f 0%, #001338 100%) !important;
+            border: 1px solid #001338 !important;
+        }
+
+        .stFormSubmitButton > button:hover {
+            color: #ffffff !important;
+            background: linear-gradient(180deg, #00266d 0%, #001b4f 100%) !important;
+            border-color: #001b4f !important;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            border-radius: 12px;
+        }
+
+        div[data-testid="stMetric"] {
+            background: var(--vw-white);
+            border: 1px solid var(--vw-line);
+            border-radius: 12px;
+            padding: 0.4rem 0.5rem;
+        }
+
+        [data-testid="stAppViewContainer"],
+        [data-testid="stAppViewContainer"] p,
+        [data-testid="stAppViewContainer"] label,
+        [data-testid="stAppViewContainer"] span,
+        [data-testid="stAppViewContainer"] li,
+        [data-testid="stAppViewContainer"] h1,
+        [data-testid="stAppViewContainer"] h2,
+        [data-testid="stAppViewContainer"] h3,
+        [data-testid="stAppViewContainer"] h4 {
+            color: #000000;
+        }
+
+        div[data-testid="stForm"] .stFormSubmitButton > button,
+        div[data-testid="stForm"] .stFormSubmitButton > button span,
+        div[data-testid="stForm"] .stFormSubmitButton > button p {
+            color: #ffffff !important;
+        }
+
+        div[data-testid="stTabs"] button[role="tab"] {
+            border-bottom: 2px solid transparent;
+            color: #000000;
+            border-radius: 0;
+            margin-right: 0.45rem;
+        }
+
+        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+            color: #000000;
+            border-bottom-color: var(--vw-electric);
+            font-weight: 700;
+        }
+
+        .stButton > button,
+        .stDownloadButton > button {
+            border-radius: 10px;
+            border: 1px solid #7ea7e4;
+            background: linear-gradient(180deg, #ffffff 0%, #f2f7ff 100%);
+            color: #000000;
+            font-weight: 600;
+        }
+
+        .stButton > button:hover,
+        .stDownloadButton > button:hover {
+            border-color: #0a72ff;
+            color: #000000;
+        }
+
+        div[data-baseweb="select"] > div,
+        div[data-baseweb="input"] > div,
+        [data-testid="stTextArea"] textarea {
+            border-radius: 10px;
+            border-color: #bdd1eb;
+            background-color: #fbfdff;
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            caret-color: #000000 !important;
+        }
+
+        [data-testid="stTextArea"] textarea::placeholder {
+            color: #556070 !important;
+            opacity: 1;
+        }
+
+        /* Force black text in select controls and dropdown option lists */
+        div[data-baseweb="select"] *,
+        div[data-baseweb="input"] * {
+            color: #000000 !important;
+        }
+
+        div[role="listbox"] *,
+        ul[role="listbox"] *,
+        [data-baseweb="menu"] * {
+            color: #000000 !important;
+        }
+
+        @media (max-width: 900px) {
+            .vw-hero {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_brand_header() -> None:
+    logo_data_uri = _load_logo_data_uri(VW_LOGO_PATH)
+    if logo_data_uri:
+        logo_html = f"<img class='vw-logo-img' src='{logo_data_uri}' alt='VW Logo' />"
+    else:
+        logo_html = "<span style='font-weight:700;color:#000000;'>VW</span>"
+
+    st.markdown(
+        f"""
+        <div class="vw-hero">
+            <div class="vw-hero-left">
+                <div class="vw-logo-wrap">
+                    {logo_html}
+                </div>
+                <div class="vw-hero-copy">
+                    <div class="vw-hero-title">VW RAG Studio</div>
+                    <div class="vw-hero-sub">Retrieval Tuning, Citations and Evaluation Workspace</div>
+                </div>
+            </div>
+            <div class="vw-chip">Design Language: Volkswagen Blue</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _init_state() -> None:
@@ -50,7 +491,7 @@ def _init_state() -> None:
         "system_prompt",
         "You are a grounded assistant. Answer with citations based on retrieved evidence only.",
     )
-    st.session_state.setdefault("user_query", "")
+    st.session_state.setdefault("compose_query", "")
 
     st.session_state.setdefault("project", DEFAULT_CONFIG["project"])
     st.session_state.setdefault("dataset", DEFAULT_CONFIG["dataset"])
@@ -168,6 +609,56 @@ def _trim_snippet(text: str, limit: int = 220) -> str:
     return clean[: limit - 3].rstrip() + "..."
 
 
+def _chat_time_label() -> str:
+    return datetime.now().strftime("%H:%M")
+
+
+def _normalize_chat_content(raw_content: Any) -> str:
+    text = str(raw_content)
+    # Backward-compat: previous buggy renders stored chat HTML in message content.
+    if "<div" in text and "chat-row" in text:
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = " ".join(text.split())
+        for prefix in ("You ", "Assistant "):
+            if text.startswith(prefix):
+                text = text[len(prefix):].lstrip()
+                break
+        text = re.sub(r"^\d{1,2}:\d{2}\s+", "", text)
+    return text
+
+
+def _render_chat_panel(messages: List[Dict[str, Any]]) -> None:
+    if not messages:
+        st.markdown(
+            "<div class='chat-shell'><div class='chat-empty'>Start a conversation by sending a query.</div></div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    rows: List[str] = []
+    for message in messages:
+        role = "user" if message.get("role") == "user" else "assistant"
+        row_class = "chat-row-user" if role == "user" else "chat-row-assistant"
+        bubble_class = "chat-bubble-user" if role == "user" else "chat-bubble-assistant"
+        label = "You" if role == "user" else "Assistant"
+
+        message_text = _normalize_chat_content(message.get("content", ""))
+        text_html = html.escape(message_text).replace("\n", "<br/>")
+        time_html = html.escape(str(message.get("ts", "")))
+        rows.append(
+            (
+                f"<div class='chat-row {row_class}'>"
+                f"<div class='chat-bubble {bubble_class}'>"
+                f"<div class='chat-meta'><span>{label}</span><span>{time_html}</span></div>"
+                f"<div class='chat-text'>{text_html}</div>"
+                "</div>"
+                "</div>"
+            )
+        )
+
+    st.markdown(f"<div class='chat-shell'>{''.join(rows)}</div>", unsafe_allow_html=True)
+
+
 def _render_sources_tab(result: Dict[str, Any] | None) -> None:
     if not result:
         st.info("No run yet. Execute a query to inspect citations.")
@@ -179,15 +670,22 @@ def _render_sources_tab(result: Dict[str, Any] | None) -> None:
         return
 
     for citation in citations:
-        badge_line = " ".join(f"`{badge}`" for badge in citation.get("badges", []))
+        badges = citation.get("badges", [])
+        badges_html = "".join(
+            f"<span class='vw-badge'>{html.escape(str(badge).upper())}</span>" for badge in badges
+        )
         with st.container():
             st.markdown(
-                f"**[{citation['id']}] {citation['doc']}**  \n"
-                f"Page {citation['page']} | Section: {citation['section']}"
+                f"""
+                <div class="vw-card">
+                    <div class="vw-card-title">[{citation['id']}] {html.escape(str(citation['doc']))}</div>
+                    <div class="vw-card-meta">Page {citation['page']} | Section: {html.escape(str(citation['section']))}</div>
+                    <div class="vw-card-snippet">{html.escape(_trim_snippet(citation.get("snippet", ""), limit=260))}</div>
+                    <div class="vw-badges">{badges_html}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
-            st.caption(_trim_snippet(citation.get("snippet", "")))
-            if badge_line:
-                st.markdown(badge_line)
             if st.button("Open evidence", key=f"open_evidence_{citation['id']}"):
                 st.session_state.selected_citation_id = citation["id"]
         st.divider()
@@ -361,17 +859,10 @@ def _render_bottom_drawer(result: Dict[str, Any] | None) -> None:
 def main() -> None:
     st.set_page_config(page_title="RAG Studio", page_icon=":material/hub:", layout="wide")
     _init_state()
+    _inject_vw_theme()
+    _render_brand_header()
 
-    st.markdown(
-        """
-        <style>
-        .block-container {padding-top: 1rem; padding-bottom: 1rem;}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.title("RAG Studio")
+    st.markdown("### RAG Studio Console")
     if st.session_state.run_notice:
         st.caption(st.session_state.run_notice)
 
@@ -391,24 +882,28 @@ def main() -> None:
     )
 
     left_pane, right_pane = st.columns([3, 2], gap="large")
+    send_from_chat = False
+    compose_query_value = st.session_state.get("compose_query", "")
 
     with left_pane:
         with st.expander("System Prompt", expanded=False):
             st.text_area("system_prompt", key="system_prompt", height=120)
 
         st.markdown("### Chat")
-        if not st.session_state.chat_messages:
-            st.caption("No messages yet.")
-        for message in st.session_state.chat_messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+        _render_chat_panel(st.session_state.chat_messages)
 
-        st.text_area("User Input", key="user_query", placeholder="Ask your retrieval question...", height=120)
-        run_from_left = st.button("Send / Run")
-
-        if st.session_state.last_result:
-            st.markdown("### Latest answer")
-            st.write(st.session_state.last_result.get("answer", ""))
+        with st.form("chat_compose_form", clear_on_submit=True, enter_to_submit=False):
+            compose_col, send_col = st.columns([6, 1])
+            with compose_col:
+                compose_query_value = st.text_input(
+                    "Message",
+                    key="compose_query",
+                    label_visibility="collapsed",
+                    placeholder="Write a message...",
+                )
+            with send_col:
+                send_from_chat = st.form_submit_button("Send", use_container_width=True)
+        st.caption("Press Enter or click Send.")
 
     with right_pane:
         tab_sources, tab_retrieval, tab_debug, tab_eval = st.tabs(
@@ -425,21 +920,24 @@ def main() -> None:
 
     _render_bottom_drawer(st.session_state.last_result)
 
-    if run_from_top or run_from_left:
-        query = st.session_state.user_query.strip()
+    if run_from_top or send_from_chat:
+        query = compose_query_value.strip()
         if not query:
             st.warning("Please provide a query before running.")
             return
 
         run_config = _collect_config(project, dataset, index_name, model_name)
         result, _mode = _run_backend(query, run_config)
+        result["answer"] = DEMO_ASSISTANT_ANSWER
 
         st.session_state.last_result = result
         st.session_state.show_hits_json = False
         st.session_state.feedback_state = {"label": None, "reason": "missing_citation", "comment": ""}
         st.session_state.selected_citation_id = result["citations"][0]["id"] if result.get("citations") else None
-        st.session_state.chat_messages.append({"role": "user", "content": query})
-        st.session_state.chat_messages.append({"role": "assistant", "content": result.get("answer", "")})
+        st.session_state.chat_messages.append({"role": "user", "content": query, "ts": _chat_time_label()})
+        st.session_state.chat_messages.append(
+            {"role": "assistant", "content": result.get("answer", ""), "ts": _chat_time_label()}
+        )
 
         append_event(_build_run_event(result))
         st.rerun()
